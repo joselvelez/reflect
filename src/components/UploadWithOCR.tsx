@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 
-export default function UploadWithOCR() {
+export default function UploadWithOCR({ onExtract }: { onExtract: (text: string) => void }) {
   const [file, setFile] = useState<File | null>(null)
   const [text, setText] = useState('')
   const [fileUrl, setFileUrl] = useState('')
@@ -25,6 +25,7 @@ export default function UploadWithOCR() {
     const data = await res.json()
     setText(data.extractedText)
     setFileUrl(data.fileUrl)
+    onExtract(data.extractedText) // 🔥 updates parent form
   }
 
   return (
@@ -39,7 +40,10 @@ export default function UploadWithOCR() {
       {text && (
         <textarea
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value)
+            onExtract(e.target.value)
+          }}
           className="w-full border p-2"
           rows={6}
         />
