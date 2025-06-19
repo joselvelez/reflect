@@ -1,4 +1,6 @@
-export async function extractTextFromImage(file: File) {
-  // Placeholder for OCR logic (e.g., Tesseract.js or API)
-  return 'Stub extracted text from image'
+import Tesseract from 'tesseract.js'
+
+export async function extractTextFromImage(filePath: string) {
+  const result = await Tesseract.recognize(filePath, 'eng')
+  return result.data.text
 }
