@@ -1,42 +1,140 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "mongodb"
+  provider = "postgresql" // or "sqlite" for local development
   url      = env("DATABASE_URL")
 }
 
 model User {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  clerkId   String   @unique
-  apiKeys   APIKey[]
-  messages  Message[]
-}
+  id        String   @id @default(cuid())
+  clerkId   String   @unique // Clerk user ID
+  email     String   @unique
+  firstName String?
+  lastName  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-model APIKey {
-  id        String @id @default(auto()) @map("_id") @db.ObjectId
-  provider  String
-  key       String
-  userId    String
-  user      User   @relation(fields: [userId], references: [id])
+  // Messages sent by this user
+  sentMessages     Message[] @relation("SentMessages")
+  // Messages received by this user
+  receivedMessages Message[] @relation("ReceivedMessages")
+
+  // AI analysis settings
+  aiProvider      String? @default("openai") // openai, anthropic, groq
+  apiKey          String? // encrypted API key
+  analysisEnabled Boolean @default(true)
+
+  @@map("users")
 }
 
 model Message {
-  id         String   @id @default(auto()) @map("_id") @db.ObjectId
-  content    String
-  type       String   // text or image
-  tags       String[]
-  analysis   Analysis?
+  id          String      @id @default(cuid())
+  content     String // Original message content
+  messageType MessageType @default(TEXT)
+
+  // Relationships
+  senderId   String
+  sender     User    @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId String? // Optional if it's a general log
+  receiver   User?   @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  // Screenshot/OCR data
+  screenshotUrl String? // URL to stored screenshot
+  ocrText       String? // Extracted text from OCR
+  ocrConfidence Float? // OCR confidence score
+
+  // Metadata
+  platform   String? // WhatsApp, SMS, Email, etc.
+  externalId String? // Original message ID from platform
+  timestamp  DateTime // When the message was originally sent
   createdAt  DateTime @default(now())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id])
+  updatedAt  DateTime @updatedAt
+
+  // AI Analysis relationship
+  analysis MessageAnalysis?
+
+  // Soft delete
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  @@map("messages")
 }
 
-model Analysis {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  messageId   String   @unique
-  result      Json
-  createdAt   DateTime @default(now())
-  message     Message  @relation(fields: [messageId], references: [id])
+model MessageAnalysis {
+  id        String  @id @default(cuid())
+  messageId String  @unique
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  // AI Analysis Results
+  toxicityScore     Float? // 0-1 scale
+  manipulationScore Float? // 0-1 scale
+  emotionalTone     String? // positive, negative, neutral, aggressive, etc.
+  sentiment         String? // positive, negative, neutral
+  sentimentScore    Float? // -1 to 1
+
+  // Specific flags
+  containsThreat       Boolean @default(false)
+  containsBlame        Boolean @default(false)
+  containsManipulation Boolean @default(false)
+  isPassiveAggressive  Boolean @default(false)
+  isConstructive       Boolean @default(false)
+
+  // AI Provider used
+  aiProvider String // openai, anthropic, groq
+  aiModel    String // gpt-4, claude-3, etc.
+
+  // Suggested improvements
+  suggestedResponse String? // AI-generated better response
+  improvementTips   String[] // Array of improvement suggestions
+
+  // Confidence and metadata
+  confidenceScore Float? // How confident the AI is
+  analysisVersion String @default("1.0") // Track analysis algorithm version
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("message_analyses")
+}
+
+model ResponseSuggestion {
+  id        String @id @default(cuid())
+  messageId String
+
+  // Suggestion content
+  suggestedText  String
+  suggestionType SuggestionType @default(IMPROVEMENT)
+  tone           String? // professional, friendly, firm, etc.
+  reasoning      String? // Why this suggestion was made
+
+  // Metadata
+  aiProvider      String
+  aiModel         String
+  confidenceScore Float?
+
+  createdAt DateTime @default(now())
+
+  @@map("response_suggestions")
+}
+
+// Enums
+enum MessageType {
+  TEXT
+  SCREENSHOT
+  VOICE_NOTE
+  EMAIL
+  OTHER
+}
+
+enum SuggestionType {
+  IMPROVEMENT // Better way to say the same thing
+  ALTERNATIVE // Different approach entirely
+  DE_ESCALATION // Calm down heated conversation
+  CLARIFICATION // Ask for clarification instead of assuming
+  BOUNDARY // Set healthy boundaries
 }
